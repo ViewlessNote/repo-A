@@ -1,0 +1,121 @@
+name: CI + Sync SDK -> backend-sdk
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  SDK_REPO: "shopware-redstone/backend-sdk"
+  SDK_DIR: "sdk/backend-sdk"
+
+jobs:
+  build-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+
+      - name: Use local SDK in go.mod (temporary, no commit)
+        run: |
+          go mod edit -replace=github.com/ORG/backend-sdk=./${{ env.SDK_DIR }}
+          go mod tidy
+
+      - name: Detect SDK changes
+        id: detect
+        run: |
+          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- ${{ env.SDK_DIR }} || true)
+          echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Exit if no SDK changes
+        if: steps.detect.outputs.changed_files == ''
+        run: echo "No sdk/ changes — nothing to sync."
+
+      - name: Create subtree split branch for SDK
+        if: steps.detect.outputs.changed_files != ''
+        run: |
+          set -euo pipefail
+          SPLIT_BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
+          git subtree split --prefix=${{ env.SDK_DIR }} -b ${SPLIT_BRANCH}
+          echo "split_branch=${SPLIT_BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Push split branch to SDK repo
+        if: steps.detect.outputs.changed_files != ''
+        env:
+          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          SPLIT_BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
+          REMOTE="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${{ env.SDK_REPO }}.git"
+          git push "${REMOTE}" "refs/heads/${SPLIT_BRANCH}:refs/heads/${SPLIT_BRANCH}"
+
+      - name: Create Pull Request in SDK repo
+        if: steps.detect.outputs.changed_files != ''
+        id: create_pr
+        env:
+          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
+          TITLE="ci: Sync SDK changes from paas-backend (run ${GITHUB_RUN_ID})"
+          BODY="Automated sync of SDK changes from paas-backend.\n\nPaaS commit: ${GITHUB_SHA}\nRun: ${GITHUB_RUN_URL}"
+          RESP=$(curl -s -X POST \
+            -H "Authorization: token ${SDK_REPO_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ env.SDK_REPO }}/pulls" \
+            -d "$(jq -n --arg t "$TITLE" --arg h "$BRANCH" --arg b "$BODY" '{title:$t, head:$h, base:"main", body:$b}')")
+          echo "$RESP" > pr_response.json
+          PR_NUMBER=$(jq -r .number pr_response.json)
+          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+          echo "pr_url=$(jq -r .html_url pr_response.json)" >> $GITHUB_OUTPUT
+
+      - name: Try auto-merge PR (if possible)
+        if: steps.detect.outputs.changed_files != '' && steps.create_pr.outputs.pr_number != ''
+        id: try_merge
+        env:
+          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          PR=${{ steps.create_pr.outputs.pr_number }}
+          MERGE_RESP=$(curl -s -X PUT \
+            -H "Authorization: token ${SDK_REPO_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ env.SDK_REPO }}/pulls/${PR}/merge" \
+            -d '{"merge_method":"squash"}')
+          echo "$MERGE_RESP" > merge_response.json
+          MERGED=$(jq -r .merged merge_response.json // "false")
+          if [ "$MERGED" = "true" ]; then
+            echo "merged=true" >> $GITHUB_OUTPUT
+          else
+            echo "merged=false" >> $GITHUB_OUTPUT
+            cat merge_response.json
+          fi
+
+      - name: Create Release in SDK repo (if merged)
+        if: steps.try_merge.outputs.merged == 'true'
+        env:
+          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="v$(date +'%Y.%m.%d')-run${GITHUB_RUN_ID}"
+          RELEASE_NAME="paas-backend sync ${GITHUB_RUN_ID}"
+          RELEASE_BODY="Automated release created after merging SDK sync from paas-backend.\nPaaS commit: ${GITHUB_SHA}\nRun: ${GITHUB_RUN_URL}"
+          RESP=$(curl -s -X POST \
+            -H "Authorization: token ${SDK_REPO_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ env.SDK_REPO }}/releases" \
+            -d "$(jq -n --arg t "$TAG" --arg n "$RELEASE_NAME" --arg b "$RELEASE_BODY" --arg target "main" '{tag_name:$t, target_commitish:$target, name:$n, body:$b, draft:false, prerelease:false}')")
+          echo "$RESP" > release_response.json
+          cat release_response.json
