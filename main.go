@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	greeterv1 "github.com/ViewlessNote/actions-test/gen/go/greeter/v1"
+	greeterv1 "github.com/ViewlessNote/repo-A/gen/go/greeter/v1"
 )
 
 // greet is a simple handler demonstrating the generated SDK types.
