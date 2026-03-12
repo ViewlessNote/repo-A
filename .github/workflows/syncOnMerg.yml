@@ -62,32 +62,55 @@ jobs:
           echo "created_local_branch=${BRANCH}" >> $GITHUB_OUTPUT
           echo "split_branch=${BRANCH}" >> $GITHUB_OUTPUT
 
-      - name: Push split commit as branch to SDK repo (robust)
+      - name: Push split commit as branch to SDK repo (robust + debug)
         if: steps.split.outputs.split_commit != ''
         env:
+          TARGET_REPO: ${{ env.SDK_REPO }}
           SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          TARGET_REPO="${{ env.SDK_REPO }}"
+
           SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
-          BRANCH="${{ steps.split.outputs.split_branch }}"
-          REMOTE="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${TARGET_REPO}.git"
+          BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
+          REMOTE_URL="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${TARGET_REPO}.git"  # NO trailing slash!
 
           echo "DEBUG: split_commit=${SPLIT_COMMIT}"
           echo "DEBUG: branch=${BRANCH}"
-          # sanity checks
-          git rev-parse --verify "${SPLIT_COMMIT}" || { echo "Split commit not found"; exit 1; }
 
-          # API check (gibt klaren Fehler aus, falls Token/Repo falsch)
+          # sanity
+          git rev-parse --verify "${SPLIT_COMMIT}" >/dev/null || { echo "ERROR: Split commit not found locally"; exit 1; }
+
+          # API check - quick fail with clear message
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token ${SDK_REPO_TOKEN}" "https://api.github.com/repos/${TARGET_REPO}")
           echo "API HTTP status: ${HTTP_STATUS}"
           if [ "${HTTP_STATUS}" != "200" ]; then
-            echo "ERROR: repository not accessible (HTTP ${HTTP_STATUS}). Check TARGET_REPO and token permissions."
+            echo "ERROR: repository not accessible via API (HTTP ${HTTP_STATUS}). Check TARGET_REPO and token permissions."
             exit 1
           fi
 
-          # push die Commit-SHA als neuen Branch im Zielrepo (funktioniert auch wenn lokaler Branch fehlt)
-          git push "${REMOTE}" "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
+          # ls-remote checks if Git-over-HTTPS access works
+          if ! git ls-remote "${REMOTE_URL}" HEAD >/dev/null 2>&1; then
+            echo "ERROR: git ls-remote failed. Token likely lacks Git-over-HTTPS permissions or repo path wrong."
+            echo " - If you use a fine-grained token: ensure repo access and 'Contents: Read & write' are granted."
+            echo " - If repo in Org: ensure PAT account is SSO-authorized."
+            exit 1
+          fi
+          echo "ls-remote OK"
+
+          # configure origin and push (push <sha>:refs/heads/<branch>)
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "${REMOTE_URL}"
+          git remote -v
+
+          echo "Enabling git debug traces (will show HTTP auth attempt if push fails)"
+          export GIT_TRACE=1
+          export GIT_CURL_VERBOSE=1
+
+          git push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}" || {
+            echo "ERROR: git push failed — inspect git trace above for details (403/401/ssh auth, SSO, token scope)."
+            exit 1
+          }
+
           echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
 
       - name: Create Pull Request in SDK repo
