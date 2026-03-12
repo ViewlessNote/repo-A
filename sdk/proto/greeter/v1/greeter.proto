@@ -9,6 +9,7 @@ message GreetRequest {
   string VorName = 1;
   string Nachname = 2;
   string Me = 3;
+  string we = 4;
 }
 
 // GreetResponse holds the greeting message.
