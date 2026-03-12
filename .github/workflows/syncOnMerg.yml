@@ -9,7 +9,7 @@ permissions:
   pull-requests: write
 
 env:
-  SDK_REPO: "ViewlessNote/repo-A"
+  SDK_REPO: "ViewlessNote/repo-B"
   SDK_DIR: "sdk"
 
 jobs:
