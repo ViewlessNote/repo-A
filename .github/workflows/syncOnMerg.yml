@@ -75,28 +75,13 @@ jobs:
           REMOTE_URL="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${TARGET_REPO}.git"  # NO trailing slash!
           fi
 
-          # ls-remote checks if Git-over-HTTPS access works
-          if ! git ls-remote "${REMOTE_URL}" HEAD >/dev/null 2>&1; then
-            echo "ERROR: git ls-remote failed. Token likely lacks Git-over-HTTPS permissions or repo path wrong."
-            echo " - If you use a fine-grained token: ensure repo access and 'Contents: Read & write' are granted."
-            echo " - If repo in Org: ensure PAT account is SSO-authorized."
-            exit 1
-          fi
-          echo "ls-remote OK"
-
-          # configure origin and push (push <sha>:refs/heads/<branch>)
-          git remote remove origin 2>/dev/null || true
-          git remote set-url "${REMOTE_URL}"
+          git set-url origin "${REMOTE_URL}"
           git remote -v
 
-          echo "Enabling git debug traces (will show HTTP auth attempt if push fails)"
           export GIT_TRACE=1
           export GIT_CURL_VERBOSE=1
 
-          git push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}" || {
-            echo "ERROR: git push failed — inspect git trace above for details (403/401/ssh auth, SSO, token scope)."
-            exit 1
-          }
+          git push
 
           echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
 
