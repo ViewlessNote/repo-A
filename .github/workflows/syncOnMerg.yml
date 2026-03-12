@@ -71,7 +71,7 @@ jobs:
           set -euo pipefail
           SPLIT_BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
           REMOTE="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${{ env.SDK_REPO }}.git"
-          git remote set-url --push REMOTE
+          git remote set-url --push origin REMOTE
           git push
 
       - name: Create Pull Request in SDK repo
