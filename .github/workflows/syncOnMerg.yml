@@ -72,8 +72,7 @@ jobs:
 
           SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
-          REMOTE_URL="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${TARGET_REPO}.git"  # NO trailing slash!
-          fi
+          REMOTE_URL="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${TARGET_REPO}.git"
 
           git set-url origin "${REMOTE_URL}"
           git remote -v
