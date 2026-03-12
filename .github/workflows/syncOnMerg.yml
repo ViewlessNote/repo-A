@@ -73,19 +73,6 @@ jobs:
           SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
           REMOTE_URL="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${TARGET_REPO}.git"  # NO trailing slash!
-
-          echo "DEBUG: split_commit=${SPLIT_COMMIT}"
-          echo "DEBUG: branch=${BRANCH}"
-
-          # sanity
-          git rev-parse --verify "${SPLIT_COMMIT}" >/dev/null || { echo "ERROR: Split commit not found locally"; exit 1; }
-
-          # API check - quick fail with clear message
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token ${SDK_REPO_TOKEN}" "https://api.github.com/repos/${TARGET_REPO}")
-          echo "API HTTP status: ${HTTP_STATUS}"
-          if [ "${HTTP_STATUS}" != "200" ]; then
-            echo "ERROR: repository not accessible via API (HTTP ${HTTP_STATUS}). Check TARGET_REPO and token permissions."
-            exit 1
           fi
 
           # ls-remote checks if Git-over-HTTPS access works
@@ -99,7 +86,7 @@ jobs:
 
           # configure origin and push (push <sha>:refs/heads/<branch>)
           git remote remove origin 2>/dev/null || true
-          git remote add origin "${REMOTE_URL}"
+          git remote set-url "${REMOTE_URL}"
           git remote -v
 
           echo "Enabling git debug traces (will show HTTP auth attempt if push fails)"
