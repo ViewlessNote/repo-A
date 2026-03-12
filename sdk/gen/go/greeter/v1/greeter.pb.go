@@ -25,6 +25,7 @@ const (
 type GreetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	VorName       string                 `protobuf:"bytes,1,opt,name=VorName,proto3" json:"VorName,omitempty"`
+	NachName      string                 `protobuf:"bytes,2,opt,name=NachName,proto3" json:"NachName,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -62,6 +63,13 @@ func (*GreetRequest) Descriptor() ([]byte, []int) {
 func (x *GreetRequest) GetVorName() string {
 	if x != nil {
 		return x.VorName
+	}
+	return ""
+}
+
+func (x *GreetRequest) GetNachName() string {
+	if x != nil {
+		return x.NachName
 	}
 	return ""
 }
@@ -124,9 +132,10 @@ var File_greeter_v1_greeter_proto protoreflect.FileDescriptor
 const file_greeter_v1_greeter_proto_rawDesc = "" +
 	"\n" +
 	"\x18greeter/v1/greeter.proto\x12\n" +
-	"greeter.v1\"(\n" +
+	"greeter.v1\"D\n" +
 	"\fGreetRequest\x12\x18\n" +
-	"\aVorName\x18\x01 \x01(\tR\aVorName\"C\n" +
+	"\aVorName\x18\x01 \x01(\tR\aVorName\x12\x1a\n" +
+	"\bNachName\x18\x02 \x01(\tR\bNachName\"C\n" +
 	"\rGreetResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x18\n" +
 	"\amesage2\x18\x02 \x01(\tR\amesage22N\n" +
