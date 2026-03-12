@@ -38,32 +38,66 @@ jobs:
         if: steps.detect.outputs.changed_files == ''
         run: echo "No sdk/ changes — nothing to sync."
 
-      - name: Create subtree split branch for SDK
+      - name: Create subtree split commit (SHA) & local branch
         if: steps.detect.outputs.changed_files != ''
+        id: split
         run: |
           set -euo pipefail
-          SPLIT_BRANCH="ci/sdk-sync-${GITHUB_RUN_ID}"
-          git subtree split --prefix=${{ env.SDK_DIR }} -b ${SPLIT_BRANCH}
-          echo "split_branch=${SPLIT_BRANCH}" >> $GITHUB_OUTPUT
+          SDK_DIR="${{ env.SDK_DIR }}"
+          # erzeugt eine Commit-SHA, die nur den Inhalt von SDK_DIR enthält (oder leer)
+          SPLIT_COMMIT=$(git subtree split --prefix="${SDK_DIR}" 2>/dev/null || true)
+          echo "split_commit=${SPLIT_COMMIT}" >> $GITHUB_OUTPUT
 
-      - name: Push split branch to SDK repo
-        if: steps.detect.outputs.changed_files != ''
+          if [ -z "${SPLIT_COMMIT}" ]; then
+            echo "No subtree split commit produced for prefix '${SDK_DIR}'. Nothing to push."
+            exit 0
+          fi
+
+          # lege lokal einen Branch an (hilft beim Debugging)
+          BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
+          if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+            git branch -D "${BRANCH}" || true
+          fi
+          git branch "${BRANCH}" "${SPLIT_COMMIT}"
+          echo "created_local_branch=${BRANCH}" >> $GITHUB_OUTPUT
+          echo "split_branch=${BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Push split commit as branch to SDK repo (robust)
+        if: steps.split.outputs.split_commit != ''
         env:
           SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          SPLIT_BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
-          REMOTE="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${{ env.SDK_REPO }}.git"
-          git push "${REMOTE}" "refs/heads/${SPLIT_BRANCH}:refs/heads/${SPLIT_BRANCH}"
+          TARGET_REPO="${{ env.SDK_REPO }}"
+          SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
+          BRANCH="${{ steps.split.outputs.split_branch }}"
+          REMOTE="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${TARGET_REPO}.git"
+
+          echo "DEBUG: split_commit=${SPLIT_COMMIT}"
+          echo "DEBUG: branch=${BRANCH}"
+          # sanity checks
+          git rev-parse --verify "${SPLIT_COMMIT}" || { echo "Split commit not found"; exit 1; }
+
+          # API check (gibt klaren Fehler aus, falls Token/Repo falsch)
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token ${SDK_REPO_TOKEN}" "https://api.github.com/repos/${TARGET_REPO}")
+          echo "API HTTP status: ${HTTP_STATUS}"
+          if [ "${HTTP_STATUS}" != "200" ]; then
+            echo "ERROR: repository not accessible (HTTP ${HTTP_STATUS}). Check TARGET_REPO and token permissions."
+            exit 1
+          fi
+
+          # push die Commit-SHA als neuen Branch im Zielrepo (funktioniert auch wenn lokaler Branch fehlt)
+          git push "${REMOTE}" "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
+          echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
 
       - name: Create Pull Request in SDK repo
-        if: steps.detect.outputs.changed_files != ''
+        if: steps.split.outputs.split_commit != ''
         id: create_pr
         env:
           SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
+          BRANCH="${{ steps.split.outputs.split_branch }}"
           TITLE="ci: Sync SDK changes from paas-backend (run ${GITHUB_RUN_ID})"
           BODY="Automated sync of SDK changes from paas-backend.\n\nPaaS commit: ${GITHUB_SHA}\nRun: ${GITHUB_RUN_URL}"
           RESP=$(curl -s -X POST \
@@ -73,11 +107,16 @@ jobs:
             -d "$(jq -n --arg t "$TITLE" --arg h "$BRANCH" --arg b "$BODY" '{title:$t, head:$h, base:"main", body:$b}')")
           echo "$RESP" > pr_response.json
           PR_NUMBER=$(jq -r .number pr_response.json)
+          if [ "$PR_NUMBER" = "null" ] || [ -z "$PR_NUMBER" ]; then
+            echo "Failed to create PR. Response:"
+            cat pr_response.json
+            exit 1
+          fi
           echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
           echo "pr_url=$(jq -r .html_url pr_response.json)" >> $GITHUB_OUTPUT
 
       - name: Try auto-merge PR (if possible)
-        if: steps.detect.outputs.changed_files != '' && steps.create_pr.outputs.pr_number != ''
+        if: steps.split.outputs.split_commit != '' && steps.create_pr.outputs.pr_number != ''
         id: try_merge
         env:
           SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
