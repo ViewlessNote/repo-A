@@ -78,7 +78,6 @@ func (x *GreetRequest) GetNachName() string {
 type GreetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Mesage2       string                 `protobuf:"bytes,2,opt,name=mesage2,proto3" json:"mesage2,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -120,13 +119,6 @@ func (x *GreetResponse) GetMessage() string {
 	return ""
 }
 
-func (x *GreetResponse) GetMesage2() string {
-	if x != nil {
-		return x.Mesage2
-	}
-	return ""
-}
-
 var File_greeter_v1_greeter_proto protoreflect.FileDescriptor
 
 const file_greeter_v1_greeter_proto_rawDesc = "" +
@@ -135,10 +127,9 @@ const file_greeter_v1_greeter_proto_rawDesc = "" +
 	"greeter.v1\"D\n" +
 	"\fGreetRequest\x12\x18\n" +
 	"\aVorName\x18\x01 \x01(\tR\aVorName\x12\x1a\n" +
-	"\bNachName\x18\x02 \x01(\tR\bNachName\"C\n" +
+	"\bNachName\x18\x02 \x01(\tR\bNachName\")\n" +
 	"\rGreetResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12\x18\n" +
-	"\amesage2\x18\x02 \x01(\tR\amesage22N\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage2N\n" +
 	"\x0eGreeterService\x12<\n" +
 	"\x05Greet\x12\x18.greeter.v1.GreetRequest\x1a\x19.greeter.v1.GreetResponseBBZ@github.com/ViewlessNote/actions-test/gen/go/greeter/v1;greeterv1b\x06proto3"
 
