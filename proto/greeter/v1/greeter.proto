@@ -14,6 +14,7 @@ message GreetRequest {
 message GreetResponse {
   string message = 1;
   string mesage2 = 2;
+  string mesage3 = 3;
 }
 
 // GreeterService provides a simple greeting RPC.
