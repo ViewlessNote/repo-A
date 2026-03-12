@@ -135,8 +135,7 @@ const file_greeter_v1_greeter_proto_rawDesc = "" +
 	"greeter.v1\"Z\n" +
 	"\fGreetRequest\x12\x18\n" +
 	"\aVorName\x18\x01 \x01(\tR\aVorName\x12\x1a\n" +
-	"\bNachName\x18\x02 \x01(\tR\bNachName\x12\x14\n" +
-	"\x05alter\x18\x03 \x01(\tR\x05alter\")\n" +
+	"\bNachName\x18\x02 \x01(\tR\bNachName\")\n" +
 	"\rGreetResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage2N\n" +
 	"\x0eGreeterService\x12<\n" +
