@@ -85,7 +85,7 @@ jobs:
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
           # set origin to target repo (gh handles auth)
           git remote remove origin 2>/dev/null || true
-          git remote add origin "git@github.com/${TARGET_REPO}.git"
+          git remote add origin "git@github.com:${TARGET_REPO}.git"
           git rev-parse --verify "${SPLIT_COMMIT}" >/dev/null || { echo "Split commit missing"; exit 1; }
           git push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
 
