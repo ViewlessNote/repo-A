@@ -67,10 +67,9 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y gh
 
-      - name: Set up git credentials for gh
+      - name: Set up git credentials
         env:
-          token: ${{ secrets.SDK_REPO_TOKEN }}
-        run: git remote set-url origin https://${{token}}github.com/ViewlessNote/repo-B.git
+        run: git remote set-url origin https://${{secrets.SDK_REPO_TOKEN}}@github.com/ViewlessNote/repo-B.git
 
 
       - name: Push SDK branch to repo-B (using gh auth)
