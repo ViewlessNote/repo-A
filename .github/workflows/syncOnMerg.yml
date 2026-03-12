@@ -9,8 +9,8 @@ permissions:
   pull-requests: write
 
 env:
-  SDK_REPO: "shopware-redstone/backend-sdk"
-  SDK_DIR: "sdk/backend-sdk"
+  SDK_REPO: "ViewlessNote/repo-A"
+  SDK_DIR: "sdk"
 
 jobs:
   build-and-sync:
@@ -28,7 +28,7 @@ jobs:
 
       - name: Use local SDK in go.mod (temporary, no commit)
         run: |
-          go mod edit -replace=github.com/ORG/backend-sdk=./${{ env.SDK_DIR }}
+          go mod edit -replace=github.com/Viewlessnote/repo-A/sdk=./${{ env.SDK_DIR }}
           go mod tidy
 
       - name: Detect SDK changes
@@ -47,7 +47,7 @@ jobs:
         if: steps.detect.outputs.changed_files != ''
         run: |
           set -euo pipefail
-          SPLIT_BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
+          SPLIT_BRANCH="ci/sdk-sync-${GITHUB_RUN_ID}"
           git subtree split --prefix=${{ env.SDK_DIR }} -b ${SPLIT_BRANCH}
           echo "split_branch=${SPLIT_BRANCH}" >> $GITHUB_OUTPUT
 

@@ -3,7 +3,7 @@ name: Build Go App
 on:
   push:
     branches:
-      - '**'   # läuft auf JEDEM Branch
+      - '**'
 
 jobs:
   build:
