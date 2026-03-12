@@ -61,66 +61,72 @@ jobs:
           git branch "${BRANCH}" "${SPLIT_COMMIT}"
           echo "created_local_branch=${BRANCH}" >> $GITHUB_OUTPUT
           echo "split_branch=${BRANCH}" >> $GITHUB_OUTPUT
+      - name: Install GitHub CLI (gh)
+        if: steps.split.outputs.split_commit != ''
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y gh
 
-      - name: Push split commit as branch to SDK repo (robust + debug)
+      - name: Authenticate gh with PAT
+        if: steps.split.outputs.split_commit != ''
+        env:
+          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+        run: |
+          echo "${SDK_REPO_TOKEN}" | gh auth login --with-token
+          gh auth status
+
+      - name: Push SDK branch to repo-B (using gh auth)
         if: steps.split.outputs.split_commit != ''
         env:
           TARGET_REPO: ${{ env.SDK_REPO }}
-          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          SPLIT_BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
-          REMOTE="https://x-access-token:${SDK_REPO_TOKEN}@github.com/${{ env.SDK_REPO }}.git"
-          git remote set-url --push origin ${REMOTE}
-          git push
+          SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
+          BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
+          # set origin to target repo (gh handles auth)
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "https://github.com/${TARGET_REPO}.git"
+          git rev-parse --verify "${SPLIT_COMMIT}" >/dev/null || { echo "Split commit missing"; exit 1; }
+          git push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
 
-      - name: Create Pull Request in SDK repo
+          echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Create PR in repo-B via gh
         if: steps.split.outputs.split_commit != ''
-        id: create_pr
         env:
-          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+          TARGET_REPO: ${{ env.SDK_REPO }}
+        id: gh_create_pr
         run: |
           set -euo pipefail
-          BRANCH="${{ steps.split.outputs.split_branch }}"
+          BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
           TITLE="ci: Sync SDK changes from paas-backend (run ${GITHUB_RUN_ID})"
-          BODY="Automated sync of SDK changes from paas-backend.\n\nPaaS commit: ${GITHUB_SHA}\nRun: ${GITHUB_RUN_URL}"
-          RESP=$(curl -s -X POST \
-            -H "Authorization: token ${SDK_REPO_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ env.SDK_REPO }}/pulls" \
-            -d "$(jq -n --arg t "$TITLE" --arg h "$BRANCH" --arg b "$BODY" '{title:$t, head:$h, base:"main", body:$b}')")
-          echo "$RESP" > pr_response.json
-          PR_NUMBER=$(jq -r .number pr_response.json)
-          if [ "$PR_NUMBER" = "null" ] || [ -z "$PR_NUMBER" ]; then
-            echo "Failed to create PR. Response:"
-            cat pr_response.json
+          BODY="Automated sync of sdk/ from paas-backend.\n\nPaaS commit: ${GITHUB_SHA}\nRun: ${GITHUB_RUN_URL}"
+          # create PR and emit its number
+          PR_NUMBER=$(gh pr create --repo "${TARGET_REPO}" --head "${BRANCH}" --base "main" --title "${TITLE}" --body "${BODY}" --json number -q .number)
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "Failed to create PR (gh output empty)"
             exit 1
           fi
           echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
-          echo "pr_url=$(jq -r .html_url pr_response.json)" >> $GITHUB_OUTPUT
+          echo "pr_url=$(gh pr view ${PR_NUMBER} --repo ${TARGET_REPO} --json url -q .url)" >> $GITHUB_OUTPUT
 
-      - name: Try auto-merge PR (if possible)
-        if: steps.split.outputs.split_commit != '' && steps.create_pr.outputs.pr_number != ''
-        id: try_merge
+      - name: Try auto-merge PR via gh (best-effort)
+        if: steps.split.outputs.split_commit != '' && steps.gh_create_pr.outputs.pr_number != ''
         env:
-          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+          TARGET_REPO: ${{ env.SDK_REPO }}
+        id: gh_try_merge
         run: |
           set -euo pipefail
-          PR=${{ steps.create_pr.outputs.pr_number }}
-          MERGE_RESP=$(curl -s -X PUT \
-            -H "Authorization: token ${SDK_REPO_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ env.SDK_REPO }}/pulls/${PR}/merge" \
-            -d '{"merge_method":"squash"}')
-          echo "$MERGE_RESP" > merge_response.json
-          MERGED=$(jq -r .merged merge_response.json // "false")
-          if [ "$MERGED" = "true" ]; then
+          PR_NUMBER="${{ steps.gh_create_pr.outputs.pr_number }}"
+          # try immediate merge (squash). If it fails, we don't fail the workflow — PR stays for manual review.
+          if gh pr merge "${PR_NUMBER}" --repo "${TARGET_REPO}" --squash --delete-branch --yes 2>/tmp/gh_merge_err; then
             echo "merged=true" >> $GITHUB_OUTPUT
           else
             echo "merged=false" >> $GITHUB_OUTPUT
-            cat merge_response.json
+            echo "merge-error:"
+            cat /tmp/gh_merge_err || true
+            # optional: leave workflow non-failing so PR can be reviewed and merged manually
           fi
-
       - name: Create Release in SDK repo (if merged)
         if: steps.try_merge.outputs.merged == 'true'
         env:
