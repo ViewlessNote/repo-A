@@ -10,7 +10,7 @@ permissions:
 
 env:
   SDK_REPO: "ViewlessNote/repo-B"
-  SDK_DIR: "sdk/proto"
+  SDK_DIR: "sdk"
 
 jobs:
   build-and-sync:
@@ -99,7 +99,7 @@ jobs:
           git checkout -b "${BRANCH}"
 
           # copy contents (overwrite) — preserve .git in dst
-          rsync -a --delete --exclude='.git' --exclude='.github' "${SRC_DIR}/" "${DST_DIR}/"
+          rsync -a --delete --exclude='.git' --exclude='.github' --exclude='gen' "${SRC_DIR}/" "${DST_DIR}/"
 
           # detect changes
           if git status --porcelain | tee /tmp/git_status | grep -q .; then
