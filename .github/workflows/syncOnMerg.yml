@@ -122,7 +122,7 @@ jobs:
           set -euo pipefail
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
           TITLE="ci: Sync SDK changes from paas-backend (run ${GITHUB_RUN_ID})"
-          BODY="Automated sync of ${SDK_DIR}/ from paas-backend.\n\nPaaS commit: ${GITHUB_SHA}\nRun: ${GITHUB_RUN_URL}"
+          BODY="Automated sync of ${SDK_DIR}/ from paas-backend.\n\nPaaS commit: ${GITHUB_SHA}"
           PR_NUMBER=$(gh pr create --repo "${TARGET_REPO}" --head "${BRANCH}" --base "main" --title "${TITLE}" --body "${BODY}" --json number -q .number)
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
             echo "Failed to create PR (gh output empty)"
