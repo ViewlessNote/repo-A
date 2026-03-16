@@ -10,7 +10,7 @@ permissions:
 
 env:
   SDK_REPO: "ViewlessNote/repo-B"
-  SDK_DIR: "sdk"
+  SDK_DIR: "sdk/proto"
 
 jobs:
   build-and-sync:
@@ -34,24 +34,6 @@ jobs:
           echo "$CHANGED" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Install Protobuf
-        if: steps.detect.outputs.changed_files != ''
-        uses: bufbuild/buf-setup-action@v1.50.0
-
-      - name: Install go buf Modules (if SDK changes)
-        if: steps.detect.outputs.changed_files != ''
-        working-directory: ${{ env.SDK_DIR }}
-        run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.29.0
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2.0
-
-      - name: Buf Generate (if SDK changes)
-        if: steps.detect.outputs.changed_files != ''
-        working-directory: ${{ env.SDK_DIR }}
-        run: |
-          echo "SDK changes detected; running 'buf generate'..."
-          buf generate
-
       - name: Exit if no SDK changes
         if: steps.detect.outputs.changed_files == ''
         run: echo "No sdk/ changes — nothing to sync."
@@ -62,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           SDK_DIR="${{ env.SDK_DIR }}"
-          # erzeugt eine Commit-SHA, die nur den Inhalt von SDK_DIR enthält (oder leer)
+          # generate subtree split commit SHA for the SDK_DIR prefix;
           SPLIT_COMMIT=$(git subtree split --prefix="${SDK_DIR}" 2>/dev/null || true)
           echo "split_commit=${SPLIT_COMMIT}" >> $GITHUB_OUTPUT
 
@@ -71,7 +53,7 @@ jobs:
             exit 0
           fi
 
-          # lege lokal einen Branch an (hilft beim Debugging)
+          # make a local branch
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
           if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
             git branch -D "${BRANCH}" || true
@@ -123,12 +105,10 @@ jobs:
           if git status --porcelain | tee /tmp/git_status | grep -q .; then
             git add -A
             git commit -m "CI: sync ${SDK_DIR} from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-            # push; actions/checkout already configured origin with token
             git push origin "${BRANCH}"
             echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
           else
             echo "No changes to commit in ${SDK_DIR}; nothing pushed."
-            # leave outputs empty or set pushed_branch to empty if you like
           fi
 
       - name: Create PR in repo-B via gh
@@ -161,34 +141,13 @@ jobs:
         run: |
           set -euo pipefail
           PR_NUMBER="${{ steps.gh_create_pr.outputs.pr_number }}"
+          
           if gh pr merge "${PR_NUMBER}" --repo "${TARGET_REPO}" --squash --delete-branch 2>/tmp/gh_merge_err; then
           echo "merged=true" >> $GITHUB_OUTPUT
-          
+    
           else
           echo "merged=false" >> $GITHUB_OUTPUT
           echo "merge-error:"
           cat /tmp/gh_merge_err || true
           
           fi
-
-      - name: Create Release in SDK repo (if merged)
-        if: steps.gh_try_merge.outputs.merged == 'true'
-        env:
-          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
-          TARGET_REPO: ${{ env.SDK_REPO }}
-        run: |
-          set -euo pipefail
-
-          TAG="v$(date +'%Y.%m.%d')-run${GITHUB_RUN_ID}"
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-  
-          RELEASE_BODY="Automated release created after merging SDK sync from paas-backend.
-
-          PaaS commit: ${GITHUB_SHA}
-          Run: ${RUN_URL}"
-  
-          gh release create "$TAG" \
-          --repo "${TARGET_REPO}" \
-          --target main \
-          --title "paas-backend sync ${GITHUB_RUN_ID}" \
-          --notes "${RELEASE_BODY}"
