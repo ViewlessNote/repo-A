@@ -41,8 +41,10 @@ jobs:
       - name: Buf Generate (if SDK changes)
         if: steps.detect.outputs.changed_files != ''
         run: |
+        working-directory: ${{ env.SDK_DIR }}
           echo "SDK changes detected; running 'buf generate'..."
-          buf generate --path "/${{ env.SDK_DIR }}"
+          wo
+          buf generate
 
       - name: Exit if no SDK changes
         if: steps.detect.outputs.changed_files == ''
