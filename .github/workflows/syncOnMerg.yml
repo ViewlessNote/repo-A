@@ -98,7 +98,7 @@ jobs:
           git checkout -b "${BRANCH}"
 
           # copy contents (overwrite) — preserve .git in dst
-          rsync -a --delete "${SRC_DIR}/" "${DST_DIR}/"
+          rsync -a --delete --exclude='.git' "${SRC_DIR}/" "${DST_DIR}/"
 
           # detect changes
           if git status --porcelain | tee /tmp/git_status | grep -q .; then
