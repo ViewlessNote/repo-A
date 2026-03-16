@@ -92,10 +92,6 @@ jobs:
 
           echo "Copying files from $SRC_DIR -> $DST_DIR on branch $BRANCH"
 
-          # make sure we have correct git user
-          git config user.email "ci-bot@example.com"
-          git config user.name "CI Bot"
-
           # create and switch to branch
           git checkout -b "${BRANCH}"
 
