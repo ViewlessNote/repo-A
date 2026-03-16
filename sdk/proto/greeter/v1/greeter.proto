@@ -10,6 +10,7 @@ message GreetRequest {
   string Nachname = 4;
   string message2 = 2;
   string message3 = 3;
+  string message4 = 5;
 }
 
 // GreetResponse holds the greeting message.
