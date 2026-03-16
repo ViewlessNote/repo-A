@@ -123,13 +123,17 @@ jobs:
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
           TITLE="ci: Sync SDK changes from paas-backend (run ${GITHUB_RUN_ID})"
           BODY="Automated sync of ${SDK_DIR}/ from paas-backend.\n\nPaaS commit: ${GITHUB_SHA}"
-          PR_NUMBER=$(gh pr create --repo "${TARGET_REPO}" --head "${BRANCH}" --base "main" --title "${TITLE}" --body "${BODY}" --json number -q .number)
+          
+          PR_URL=$(gh pr create --repo "${TARGET_REPO}" --head "${BRANCH}" --base "main" --title "${TITLE}" --body "${BODY}")
+          echo "PR URL: $PR_URL"
+  
+          PR_NUMBER=$(echo "$PR_URL" | awk -F/ '{print $NF}')
+          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+          
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
             echo "Failed to create PR (gh output empty)"
             exit 1
           fi
-          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
-          echo "pr_url=$(gh pr view ${PR_NUMBER} --repo ${TARGET_REPO} --json url -q .url)" >> $GITHUB_OUTPUT
 
       - name: Try auto-merge PR via gh (best-effort)
         if: steps.detect.outputs.changed_files != '' && steps.gh_create_pr.outputs.pr_number != ''
