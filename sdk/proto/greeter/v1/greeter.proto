@@ -8,7 +8,6 @@ option go_package = "github.com/ViewlessNote/actions-test/gen/go/greeter/v1;gree
 message GreetRequest {
   string VorName = 1;
   string Nachname = 4;
-  string MiddelName = 2;
 }
 
 // GreetResponse holds the greeting message.
