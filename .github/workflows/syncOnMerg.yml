@@ -77,9 +77,19 @@ jobs:
           set -euo pipefail
           SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
-          git remote set-url origin https://x-access-token:${SDK_REPO_TOKEN}@github.com/ViewlessNote/repo-B.git
+
+          # debug: show remote and credential helper (won't leak secrets)
+          git remote -v
+          git config --get-all credential.helper || echo "no credential helper"
+
           git rev-parse --verify "${SPLIT_COMMIT}" >/dev/null || { echo "Split commit missing"; exit 1; }
-          git push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
+
+          # set a normal URL (no token in it) then use http.extraHeader on the push
+          git remote set-url origin https://github.com/ViewlessNote/repo-B.git
+
+          # Use 'token' for classic PAT or 'Bearer' for fine-grained tokens.
+          # This header applies only to the single git command and bypasses helpers.
+          git -c http.extraHeader="Authorization: token ${SDK_REPO_TOKEN}" push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
 
           echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
 
