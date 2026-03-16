@@ -79,6 +79,7 @@ jobs:
           fetch-depth: 0
 
       - name: Sync SDK directory into repo-B and push
+        id: push
         if: steps.detect.outputs.changed_files != ''
         working-directory: repo-B
         env:
@@ -113,7 +114,7 @@ jobs:
           fi
 
       - name: Create PR in repo-B via gh
-        if: steps.detect.outputs.changed_files != '' && steps.sync.outputs.pushed_branch != ''
+        if: steps.detect.outputs.changed_files != '' && steps.push.outputs.pushed_branch != ''
         env:
           TARGET_REPO: ${{ env.SDK_REPO }}
         id: gh_create_pr
