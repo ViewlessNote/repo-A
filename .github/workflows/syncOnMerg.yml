@@ -67,9 +67,6 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y gh
 
-      - name: Set up git credentials
-        run: git remote set-url origin https://${{secrets.SDK_REPO_TOKEN}}@github.com/ViewlessNote/repo-B.git
-
 
       - name: Push SDK branch to repo-B
         if: steps.split.outputs.split_commit != ''
@@ -80,7 +77,7 @@ jobs:
           SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
           git remote remove origin 2>/dev/null || true
-          git remote add origin "https://github.com/ViewlessNote/Repo-B.git"
+          git remote set-url origin https://${{secrets.SDK_REPO_TOKEN}}@github.com/ViewlessNote/repo-B.git
           git rev-parse --verify "${SPLIT_COMMIT}" >/dev/null || { echo "Split commit missing"; exit 1; }
           git push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
 
