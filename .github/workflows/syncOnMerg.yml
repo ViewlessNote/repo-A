@@ -61,48 +61,61 @@ jobs:
           git branch "${BRANCH}" "${SPLIT_COMMIT}"
           echo "created_local_branch=${BRANCH}" >> $GITHUB_OUTPUT
           echo "split_branch=${BRANCH}" >> $GITHUB_OUTPUT
+
       - name: Install GitHub CLI (gh)
-        if: steps.split.outputs.split_commit != ''
+        if: steps.detect.outputs.changed_files != ''
         run: |
           sudo apt-get update -y
           sudo apt-get install -y gh
-          # authenticate gh for the target repo using the PAT secret
           echo "${{ secrets.SDK_REPO_TOKEN }}" | gh auth login --with-token
 
-      - name: Push SDK branch into repo-B (from repo-A)
-        if: steps.split.outputs.split_commit != ''
+      - name: Checkout repo-B (target)
+        if: steps.detect.outputs.changed_files != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SDK_REPO }}
+          token: ${{ secrets.SDK_REPO_TOKEN }}
+          path: repo-B
+          fetch-depth: 0
+
+      - name: Sync SDK directory into repo-B and push
+        if: steps.detect.outputs.changed_files != ''
+        working-directory: repo-B
         env:
+          SDK_DIR: ${{ env.SDK_DIR }}
           SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
+          SRC_DIR="$GITHUB_WORKSPACE/${SDK_DIR}"
+          DST_DIR="$PWD"   # repo-B working dir
 
-          echo "Pushing split commit ${SPLIT_COMMIT} -> ${BRANCH} on ${SDK_REPO}"
+          echo "Copying files from $SRC_DIR -> $DST_DIR on branch $BRANCH"
 
-          # ensure the split commit exists locally (repo-A)
-          git rev-parse --verify "${SPLIT_COMMIT}" >/dev/null || { echo "Split commit not present locally"; exit 1; }
+          # make sure we have correct git user
+          git config user.email "ci-bot@example.com"
+          git config user.name "CI Bot"
 
-          # add remote for repo-B (do not overwrite origin)
-          git remote remove other 2>/dev/null || true
-          git remote add other https://github.com/ViewlessNote/repo-B.git
+          # create and switch to branch
+          git checkout -b "${BRANCH}"
 
-          # push the split commit from repo-A into repo-B (use Bearer or token per diagnostics)
-          # try Bearer first (fine-grained tokens), falling back to token if needed
-          if git -c http.extraHeader="Authorization: Bearer ${SDK_REPO_TOKEN}" \
-                 ls-remote https://github.com/ViewlessNote/repo-B.git >/dev/null 2>&1; then
-            AUTH_HEADER="Bearer"
+          # copy contents (overwrite) — preserve .git in dst
+          rsync -a --delete "${SRC_DIR}/" "${DST_DIR}/"
+
+          # detect changes
+          if git status --porcelain | tee /tmp/git_status | grep -q .; then
+            git add -A
+            git commit -m "CI: sync ${SDK_DIR} from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+            # push; actions/checkout already configured origin with token
+            git push origin "${BRANCH}"
+            echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
           else
-            AUTH_HEADER="token"
+            echo "No changes to commit in ${SDK_DIR}; nothing pushed."
+            # leave outputs empty or set pushed_branch to empty if you like
           fi
 
-          git -c http.extraHeader="Authorization: ${AUTH_HEADER} ${SDK_REPO_TOKEN}" \
-              push other "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
-
-          echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
-
       - name: Create PR in repo-B via gh
-        if: steps.split.outputs.split_commit != ''
+        if: steps.detect.outputs.changed_files != '' && steps.sync.outputs.pushed_branch != ''
         env:
           TARGET_REPO: ${{ env.SDK_REPO }}
         id: gh_create_pr
@@ -117,11 +130,10 @@ jobs:
             exit 1
           fi
           echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
-          PR_URL=$(gh pr view ${PR_NUMBER} --repo ${TARGET_REPO} --json url -q .url)
-          echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
+          echo "pr_url=$(gh pr view ${PR_NUMBER} --repo ${TARGET_REPO} --json url -q .url)" >> $GITHUB_OUTPUT
 
       - name: Try auto-merge PR via gh (best-effort)
-        if: steps.split.outputs.split_commit != '' && steps.gh_create_pr.outputs.pr_number != ''
+        if: steps.detect.outputs.changed_files != '' && steps.gh_create_pr.outputs.pr_number != ''
         id: gh_try_merge
         env:
           TARGET_REPO: ${{ env.SDK_REPO }}
