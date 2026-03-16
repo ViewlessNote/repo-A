@@ -143,8 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           PR_NUMBER="${{ steps.gh_create_pr.outputs.pr_number }}"
-          # try to merge non-interactively via gh (if your gh supports --confirm)
-          if gh pr merge "${PR_NUMBER}" --repo "${TARGET_REPO}" --squash --delete-branch --confirm 2>/tmp/gh_merge_err; then
+          if gh pr merge "${PR_NUMBER}" --repo "${TARGET_REPO}" --squash --delete-branch 2>/tmp/gh_merge_err; then
           echo "merged=true" >> $GITHUB_OUTPUT
           
           else
