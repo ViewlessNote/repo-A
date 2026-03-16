@@ -36,9 +36,7 @@ jobs:
 
       - name: Install Protobuf
         if: steps.detect.outputs.changed_files != ''
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y protobuf-compiler
+        uses: bufbuild/buf-setup-action@v1.50.0
 
       - name: Buf Generate (if SDK changes)
         if: steps.detect.outputs.changed_files != ''
