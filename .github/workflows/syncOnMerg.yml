@@ -24,7 +24,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.20'
+          go-version: '1.22'
 
       - name: Detect SDK changes
         id: detect
@@ -37,6 +37,13 @@ jobs:
       - name: Install Protobuf
         if: steps.detect.outputs.changed_files != ''
         uses: bufbuild/buf-setup-action@v1.50.0
+
+      - name: Install go buf Modules (if SDK changes)
+        if: steps.detect.outputs.changed_files != ''
+        working-directory: ${{ env.SDK_DIR }}
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.29.0
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2.0
 
       - name: Buf Generate (if SDK changes)
         if: steps.detect.outputs.changed_files != ''
