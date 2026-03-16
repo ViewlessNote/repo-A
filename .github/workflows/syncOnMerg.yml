@@ -80,7 +80,7 @@ jobs:
           git remote remove other 2>/dev/null || true
           git remote add other https://github.com/ViewlessNote/repo-B.git
       
-          git -c http.extraHeader="Authorization: token ${SDK_REPO_TOKEN}" push other "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
+          git -c http.extraHeader="Authorization: Bearer ${SDK_REPO_TOKEN}" push other "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
       
           echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
 
