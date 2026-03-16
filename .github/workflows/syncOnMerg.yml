@@ -66,32 +66,40 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y gh
+          # authenticate gh for the target repo using the PAT secret
+          echo "${{ secrets.SDK_REPO_TOKEN }}" | gh auth login --with-token
 
-
-      - name: Checkout repo-B
-        uses: actions/checkout@v4
-        with:
-          repository: ViewlessNote/repo-B
-          token: ${{ secrets.SDK_REPO_TOKEN }}
-          path: repo-B
-
-      - name: Push SDK branch into repo-B
+      - name: Push SDK branch into repo-B (from repo-A)
         if: steps.split.outputs.split_commit != ''
-        working-directory: repo-B
         env:
           SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"   # <-- RHS is expanded by Actions
+          SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
 
-          git fetch origin "${SPLIT_COMMIT}" || true
-          git -c http.extraHeader="Authorization: token ${SDK_REPO_TOKEN}" \
-              push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
+          echo "Pushing split commit ${SPLIT_COMMIT} -> ${BRANCH} on ${SDK_REPO}"
+
+          # ensure the split commit exists locally (repo-A)
+          git rev-parse --verify "${SPLIT_COMMIT}" >/dev/null || { echo "Split commit not present locally"; exit 1; }
+
+          # add remote for repo-B (do not overwrite origin)
+          git remote remove other 2>/dev/null || true
+          git remote add other https://github.com/ViewlessNote/repo-B.git
+
+          # push the split commit from repo-A into repo-B (use Bearer or token per diagnostics)
+          # try Bearer first (fine-grained tokens), falling back to token if needed
+          if git -c http.extraHeader="Authorization: Bearer ${SDK_REPO_TOKEN}" \
+                 ls-remote https://github.com/ViewlessNote/repo-B.git >/dev/null 2>&1; then
+            AUTH_HEADER="Bearer"
+          else
+            AUTH_HEADER="token"
+          fi
+
+          git -c http.extraHeader="Authorization: ${AUTH_HEADER} ${SDK_REPO_TOKEN}" \
+              push other "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
 
           echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
-
-          
 
       - name: Create PR in repo-B via gh
         if: steps.split.outputs.split_commit != ''
@@ -102,37 +110,37 @@ jobs:
           set -euo pipefail
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
           TITLE="ci: Sync SDK changes from paas-backend (run ${GITHUB_RUN_ID})"
-          BODY="Automated sync of sdk/ from paas-backend.\n\nPaaS commit: ${GITHUB_SHA}\nRun: ${GITHUB_RUN_URL}"
-          # create PR and emit its number
+          BODY="Automated sync of ${SDK_DIR}/ from paas-backend.\n\nPaaS commit: ${GITHUB_SHA}\nRun: ${GITHUB_RUN_URL}"
           PR_NUMBER=$(gh pr create --repo "${TARGET_REPO}" --head "${BRANCH}" --base "main" --title "${TITLE}" --body "${BODY}" --json number -q .number)
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
             echo "Failed to create PR (gh output empty)"
             exit 1
           fi
           echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
-          echo "pr_url=$(gh pr view ${PR_NUMBER} --repo ${TARGET_REPO} --json url -q .url)" >> $GITHUB_OUTPUT
+          PR_URL=$(gh pr view ${PR_NUMBER} --repo ${TARGET_REPO} --json url -q .url)
+          echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
 
       - name: Try auto-merge PR via gh (best-effort)
         if: steps.split.outputs.split_commit != '' && steps.gh_create_pr.outputs.pr_number != ''
+        id: gh_try_merge
         env:
           TARGET_REPO: ${{ env.SDK_REPO }}
-        id: gh_try_merge
         run: |
           set -euo pipefail
           PR_NUMBER="${{ steps.gh_create_pr.outputs.pr_number }}"
-          # try immediate merge (squash). If it fails, we don't fail the workflow — PR stays for manual review.
           if gh pr merge "${PR_NUMBER}" --repo "${TARGET_REPO}" --squash --delete-branch --yes 2>/tmp/gh_merge_err; then
             echo "merged=true" >> $GITHUB_OUTPUT
           else
             echo "merged=false" >> $GITHUB_OUTPUT
             echo "merge-error:"
             cat /tmp/gh_merge_err || true
-            # optional: leave workflow non-failing so PR can be reviewed and merged manually
           fi
+
       - name: Create Release in SDK repo (if merged)
-        if: steps.try_merge.outputs.merged == 'true'
+        if: steps.gh_try_merge.outputs.merged == 'true'
         env:
           SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+          TARGET_REPO: ${{ env.SDK_REPO }}
         run: |
           set -euo pipefail
           TAG="v$(date +'%Y.%m.%d')-run${GITHUB_RUN_ID}"
@@ -141,7 +149,7 @@ jobs:
           RESP=$(curl -s -X POST \
             -H "Authorization: token ${SDK_REPO_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ env.SDK_REPO }}/releases" \
+            "https://api.github.com/repos/${TARGET_REPO}/releases" \
             -d "$(jq -n --arg t "$TAG" --arg n "$RELEASE_NAME" --arg b "$RELEASE_BODY" --arg target "main" '{tag_name:$t, target_commitish:$target, name:$n, body:$b, draft:false, prerelease:false}')")
           echo "$RESP" > release_response.json
           cat release_response.json
