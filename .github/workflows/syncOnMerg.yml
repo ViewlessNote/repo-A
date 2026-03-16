@@ -68,29 +68,20 @@ jobs:
           sudo apt-get install -y gh
 
 
-      - name: Push SDK branch to repo-B
+      - name: Push SDK branch to repo-B (remote 'other')
         if: steps.split.outputs.split_commit != ''
         env:
-          TARGET_REPO: ${{ env.SDK_REPO }}
           SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
         run: |
           set -euo pipefail
           SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
-
-          # debug: show remote and credential helper (won't leak secrets)
-          git remote -v
-          git config --get-all credential.helper || echo "no credential helper"
-
-          git rev-parse --verify "${SPLIT_COMMIT}" >/dev/null || { echo "Split commit missing"; exit 1; }
-
-          # set a normal URL (no token in it) then use http.extraHeader on the push
-          git remote set-url origin https://github.com/ViewlessNote/repo-B.git
-
-          # Use 'token' for classic PAT or 'Bearer' for fine-grained tokens.
-          # This header applies only to the single git command and bypasses helpers.
-          git -c http.extraHeader="Authorization: token ${SDK_REPO_TOKEN}" push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
-
+      
+          git remote remove other 2>/dev/null || true
+          git remote add other https://github.com/ViewlessNote/repo-B.git
+      
+          git -c http.extraHeader="Authorization: token ${SDK_REPO_TOKEN}" push other "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
+      
           echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
 
       - name: Create PR in repo-B via gh
