@@ -143,12 +143,15 @@ jobs:
         run: |
           set -euo pipefail
           PR_NUMBER="${{ steps.gh_create_pr.outputs.pr_number }}"
-          if gh pr merge "${PR_NUMBER}" --repo "${TARGET_REPO}" --squash --delete-branch --yes 2>/tmp/gh_merge_err; then
-            echo "merged=true" >> $GITHUB_OUTPUT
+          # try to merge non-interactively via gh (if your gh supports --confirm)
+          if gh pr merge "${PR_NUMBER}" --repo "${TARGET_REPO}" --squash --delete-branch --confirm 2>/tmp/gh_merge_err; then
+          echo "merged=true" >> $GITHUB_OUTPUT
+          
           else
-            echo "merged=false" >> $GITHUB_OUTPUT
-            echo "merge-error:"
-            cat /tmp/gh_merge_err || true
+          echo "merged=false" >> $GITHUB_OUTPUT
+          echo "merge-error:"
+          cat /tmp/gh_merge_err || true
+          
           fi
 
       - name: Create Release in SDK repo (if merged)
