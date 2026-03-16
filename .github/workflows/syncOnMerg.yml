@@ -75,11 +75,21 @@ jobs:
           token: ${{ secrets.SDK_REPO_TOKEN }}
           path: repo-B
 
-      - name: Push branch into repo-B
+      - name: Push SDK branch into repo-B
+        if: steps.split.outputs.split_commit != ''
         working-directory: repo-B
+        env:
+          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
         run: |
+          set -euo pipefail
+          SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"   # <-- RHS is expanded by Actions
+          BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
+
           git fetch origin "${SPLIT_COMMIT}" || true
-          git push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
+          git -c http.extraHeader="Authorization: token ${SDK_REPO_TOKEN}" \
+              push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
+
+          echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
 
           
 
