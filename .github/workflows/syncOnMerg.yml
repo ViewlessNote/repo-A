@@ -91,6 +91,8 @@ jobs:
           DST_DIR="$PWD"   # repo-B working dir
 
           echo "Copying files from $SRC_DIR -> $DST_DIR on branch $BRANCH"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git config user.name "${GITHUB_ACTOR} (GitHub Actions)"
 
           # create and switch to branch
           git checkout -b "${BRANCH}"
