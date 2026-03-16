@@ -160,13 +160,17 @@ jobs:
           TARGET_REPO: ${{ env.SDK_REPO }}
         run: |
           set -euo pipefail
+
           TAG="v$(date +'%Y.%m.%d')-run${GITHUB_RUN_ID}"
-          RELEASE_NAME="paas-backend sync ${GITHUB_RUN_ID}"
-          RELEASE_BODY="Automated release created after merging SDK sync from paas-backend.\nPaaS commit: ${GITHUB_SHA}\nRun: ${GITHUB_RUN_URL}"
-          RESP=$(curl -s -X POST \
-            -H "Authorization: token ${SDK_REPO_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${TARGET_REPO}/releases" \
-            -d "$(jq -n --arg t "$TAG" --arg n "$RELEASE_NAME" --arg b "$RELEASE_BODY" --arg target "main" '{tag_name:$t, target_commitish:$target, name:$n, body:$b, draft:false, prerelease:false}')")
-          echo "$RESP" > release_response.json
-          cat release_response.json
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+  
+          RELEASE_BODY="Automated release created after merging SDK sync from paas-backend.
+
+          PaaS commit: ${GITHUB_SHA}
+          Run: ${RUN_URL}"
+  
+          gh release create "$TAG" \
+          --repo "${TARGET_REPO}" \
+          --target main \
+          --title "paas-backend sync ${GITHUB_RUN_ID}" \
+          --notes "${RELEASE_BODY}"
