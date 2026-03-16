@@ -34,6 +34,12 @@ jobs:
           echo "$CHANGED" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Install Protobuf
+        if: steps.detect.outputs.changed_files != ''
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y protobuf-compiler
+
       - name: Buf Generate (if SDK changes)
         if: steps.detect.outputs.changed_files != ''
         run: |
