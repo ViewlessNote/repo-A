@@ -68,21 +68,20 @@ jobs:
           sudo apt-get install -y gh
 
 
-      - name: Push SDK branch to repo-B (remote 'other')
-        if: steps.split.outputs.split_commit != ''
-        env:
-          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+      - name: Checkout repo-B
+        uses: actions/checkout@v4
+        with:
+          repository: ViewlessNote/repo-B
+          token: ${{ secrets.SDK_REPO_TOKEN }}
+          path: repo-B
+
+      - name: Push branch into repo-B
+        working-directory: repo-B
         run: |
-          set -euo pipefail
-          SPLIT_COMMIT="${{ steps.split.outputs.split_commit }}"
-          BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
-      
-          git remote remove other 2>/dev/null || true
-          git remote add other https://github.com/ViewlessNote/repo-B.git
-      
-          git -c http.extraHeader="Authorization: Bearer ${SDK_REPO_TOKEN}" push other "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
-      
-          echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
+          git fetch origin "${SPLIT_COMMIT}" || true
+          git push origin "${SPLIT_COMMIT}:refs/heads/${BRANCH}"
+
+          
 
       - name: Create PR in repo-B via gh
         if: steps.split.outputs.split_commit != ''
