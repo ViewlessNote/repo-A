@@ -38,6 +38,21 @@ jobs:
         if: steps.detect.outputs.changed_files == ''
         run: echo "No sdk/ changes — nothing to sync."
 
+      - name: Get last SDK commit metadata
+        if: steps.detect.outputs.changed_files != ''
+        id: sdk_commit
+        run: |
+          set -euo pipefail
+          RANGE="${{ github.event.before }}..${{ github.sha }}"
+
+          SDK_SUBJECT=$(git log --format=%s -n 1 "$RANGE" -- "${{ env.SDK_DIR }}")
+          SDK_AUTHOR_NAME=$(git log --format=%an -n 1 "$RANGE" -- "${{ env.SDK_DIR }}")
+          SDK_AUTHOR_EMAIL=$(git log --format=%ae -n 1 "$RANGE" -- "${{ env.SDK_DIR }}")
+
+          echo "subject=${SDK_SUBJECT}" >> "$GITHUB_OUTPUT"
+          echo "author_name=${SDK_AUTHOR_NAME}" >> "$GITHUB_OUTPUT"
+          echo "author_email=${SDK_AUTHOR_EMAIL}" >> "$GITHUB_OUTPUT"
+
       - name: Create subtree split commit (SHA) & local branch
         if: steps.detect.outputs.changed_files != ''
         id: split
@@ -104,7 +119,7 @@ jobs:
           # detect changes
           if git status --porcelain | tee /tmp/git_status | grep -q .; then
             git add -A
-            git commit -m "CI: sync ${SDK_DIR} from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+            git commit --author "${{ steps.sdk_commit.outputs.author_name }} <${{ steps.sdk_commit.outputs.author_email }}>" -m "${{ steps.sdk_commit.outputs.subject }}"
             git push origin "${BRANCH}"
             echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
           else
@@ -119,7 +134,7 @@ jobs:
         run: |
           set -euo pipefail
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
-          TITLE="ci: Sync SDK changes from paas-backend (run ${GITHUB_RUN_ID})"
+          TITLE="${{ steps.sdk_commit.outputs.subject }}"
           BODY="Automated sync of ${SDK_DIR}/ from paas-backend.\n\nPaaS commit: ${GITHUB_SHA}"
           
           PR_URL=$(gh pr create --repo "${TARGET_REPO}" --head "${BRANCH}" --base "main" --title "${TITLE}" --body "${BODY}")
