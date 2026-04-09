@@ -15,5 +15,4 @@ func main() {
 	req := &greeterv1.GreetRequest{VorName: "Polo"}
 	resp := greet(req)
 	fmt.Println(resp.GetMessage())
-	fmt.Println(resp.GetMessage())
 }
