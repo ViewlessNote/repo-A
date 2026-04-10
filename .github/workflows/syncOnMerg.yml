@@ -44,6 +44,9 @@ jobs:
         run: |
           set -euo pipefail
           RANGE="${{ github.event.before }}..${{ github.sha }}"
+          BREAKING_REGEX='^[a-zA-Z]+(\([^)]+\))?!:'
+          FEAT_REGEX='^feat(\([^)]+\))?:'
+          FIX_OR_CHORE_REGEX='^(fix|chore)(\([^)]+\))?:'
 
           BEST_SCORE=0
           SDK_SUBJECT=""
@@ -54,11 +57,11 @@ jobs:
             [ -n "${SUBJECT}" ] || continue
 
             SCORE=0
-            if [[ "${SUBJECT}" =~ ^[a-zA-Z]+(\([^)]+\))?!: ]]; then
+            if [[ "${SUBJECT}" =~ ${BREAKING_REGEX} ]]; then
               SCORE=3
-            elif [[ "${SUBJECT}" =~ ^feat(\([^)]+\))?: ]]; then
+            elif [[ "${SUBJECT}" =~ ${FEAT_REGEX} ]]; then
               SCORE=2
-            elif [[ "${SUBJECT}" =~ ^(fix|chore)(\([^)]+\))?: ]]; then
+            elif [[ "${SUBJECT}" =~ ${FIX_OR_CHORE_REGEX} ]]; then
               SCORE=1
             fi
 
