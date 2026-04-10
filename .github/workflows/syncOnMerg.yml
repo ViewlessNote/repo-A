@@ -38,16 +38,42 @@ jobs:
         if: steps.detect.outputs.changed_files == ''
         run: echo "No sdk/ changes — nothing to sync."
 
-      - name: Get last SDK commit metadata
+      - name: Get highest-priority SDK commit metadata
         if: steps.detect.outputs.changed_files != ''
         id: sdk_commit
         run: |
           set -euo pipefail
           RANGE="${{ github.event.before }}..${{ github.sha }}"
 
-          SDK_SUBJECT=$(git log --format=%s -n 1 "$RANGE" -- "${{ env.SDK_DIR }}")
-          SDK_AUTHOR_NAME=$(git log --format=%an -n 1 "$RANGE" -- "${{ env.SDK_DIR }}")
-          SDK_AUTHOR_EMAIL=$(git log --format=%ae -n 1 "$RANGE" -- "${{ env.SDK_DIR }}")
+          BEST_SCORE=0
+          SDK_SUBJECT=""
+          SDK_AUTHOR_NAME=""
+          SDK_AUTHOR_EMAIL=""
+
+          while IFS=$'\t' read -r SUBJECT AUTHOR_NAME AUTHOR_EMAIL; do
+            [ -n "${SUBJECT}" ] || continue
+
+            SCORE=0
+            if [[ "${SUBJECT}" =~ ^[a-zA-Z]+(\([^)]+\))?!: ]]; then
+              SCORE=3
+            elif [[ "${SUBJECT}" =~ ^feat(\([^)]+\))?: ]]; then
+              SCORE=2
+            elif [[ "${SUBJECT}" =~ ^(fix|chore)(\([^)]+\))?: ]]; then
+              SCORE=1
+            fi
+
+            if [ -z "${SDK_SUBJECT}" ] || [ "${SCORE}" -gt "${BEST_SCORE}" ]; then
+              BEST_SCORE="${SCORE}"
+              SDK_SUBJECT="${SUBJECT}"
+              SDK_AUTHOR_NAME="${AUTHOR_NAME}"
+              SDK_AUTHOR_EMAIL="${AUTHOR_EMAIL}"
+            fi
+          done < <(git log --format=$'%s\t%an\t%ae' "$RANGE" -- "${{ env.SDK_DIR }}")
+
+          if [ -z "${SDK_SUBJECT}" ]; then
+            echo "No SDK commit metadata found in range ${RANGE}"
+            exit 1
+          fi
 
           echo "subject=${SDK_SUBJECT}" >> "$GITHUB_OUTPUT"
           echo "author_name=${SDK_AUTHOR_NAME}" >> "$GITHUB_OUTPUT"
@@ -86,9 +112,9 @@ jobs:
           path: paas-backend-sdk
           fetch-depth: 0
 
-      - name: Sync SDK directory into repo and push
+      - name: Merge SDK subtree history into target repo and push
         id: push
-        if: steps.detect.outputs.changed_files != ''
+        if: steps.detect.outputs.changed_files != '' && steps.split.outputs.split_branch != ''
         working-directory: paas-backend-sdk
         env:
           SDK_DIR: ${{ env.SDK_DIR }}
@@ -96,27 +122,22 @@ jobs:
         run: |
           set -euo pipefail
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
-          SRC_DIR="$GITHUB_WORKSPACE/${SDK_DIR}"
-          DST_DIR="$PWD"
+          SOURCE_REPO_PATH="$GITHUB_WORKSPACE"
+          SOURCE_BRANCH="${{ steps.split.outputs.split_branch }}"
 
-          echo "Copying files from $SRC_DIR -> $DST_DIR on branch $BRANCH"
+          echo "Merging subtree history from ${SOURCE_REPO_PATH}:${SOURCE_BRANCH} into branch $BRANCH"
           git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
           git config --global user.name "${GITHUB_ACTOR} (GitHub Actions)"
 
-          # create and switch to branch
-          git checkout -b "${BRANCH}"
+          git checkout -b "${BRANCH}" origin/main
+          git fetch "${SOURCE_REPO_PATH}" "${SOURCE_BRANCH}:refs/remotes/source-sdk/${BRANCH}"
 
-          # copy contents (overwrite) — preserve .git in dst
-          rsync -a --delete --exclude='.git' --exclude='.github' --exclude='gen' "${SRC_DIR}/" "${DST_DIR}/"
-
-          # detect changes
-          if git status --porcelain | tee /tmp/git_status | grep -q .; then
-            git add -A
-            git commit --author "${{ steps.sdk_commit.outputs.author_name }} <${{ steps.sdk_commit.outputs.author_email }}>" -m "${{ steps.sdk_commit.outputs.subject }}"
+          if git merge-base --is-ancestor "refs/remotes/source-sdk/${BRANCH}" HEAD; then
+            echo "Target repo already contains subtree history; nothing to push."
+          else
+            git merge --allow-unrelated-histories -X theirs --no-edit "refs/remotes/source-sdk/${BRANCH}"
             git push origin "${BRANCH}"
             echo "pushed_branch=${BRANCH}" >> $GITHUB_OUTPUT
-          else
-            echo "No changes to commit in ${SDK_DIR}; nothing pushed."
           fi
 
       - name: Create PR in sdk-repo via gh
@@ -152,7 +173,7 @@ jobs:
           set -euo pipefail
           PR_NUMBER="${{ steps.gh_create_pr.outputs.pr_number }}"
           
-          if gh pr merge "${PR_NUMBER}" --repo "${TARGET_REPO}" --squash --delete-branch 2>/tmp/gh_merge_err; then
+          if gh pr merge "${PR_NUMBER}" --repo "${TARGET_REPO}" --merge --delete-branch 2>/tmp/gh_merge_err; then
           echo "merged=true" >> $GITHUB_OUTPUT
           
           else
