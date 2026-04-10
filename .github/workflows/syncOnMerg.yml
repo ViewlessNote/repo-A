@@ -14,7 +14,7 @@ env:
 
 jobs:
   build-and-sync:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v4
@@ -77,34 +77,28 @@ jobs:
           echo "created_local_branch=${BRANCH}" >> $GITHUB_OUTPUT
           echo "split_branch=${BRANCH}" >> $GITHUB_OUTPUT
 
-      - name: Install GitHub CLI (gh)
-        if: steps.detect.outputs.changed_files != ''
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y gh
-          echo "${{ secrets.SDK_REPO_TOKEN }}" | gh auth login --with-token
-
-      - name: Checkout repo-B (target)
+      - name: Checkout SDK-Repo (target)
         if: steps.detect.outputs.changed_files != ''
         uses: actions/checkout@v4
         with:
           repository: ${{ env.SDK_REPO }}
           token: ${{ secrets.SDK_REPO_TOKEN }}
-          path: repo-B
+          path: paas-backend-sdk
           fetch-depth: 0
 
-      - name: Sync SDK directory into repo-B and push
+      - name: Sync SDK directory into repo and push
         id: push
         if: steps.detect.outputs.changed_files != ''
-        working-directory: repo-B
+        working-directory: paas-backend-sdk
         env:
           SDK_DIR: ${{ env.SDK_DIR }}
           SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           BRANCH="ci/paas-sdk-sync-${GITHUB_RUN_ID}"
           SRC_DIR="$GITHUB_WORKSPACE/${SDK_DIR}"
-          DST_DIR="$PWD"   # repo-B working dir
+          DST_DIR="$PWD"
 
           echo "Copying files from $SRC_DIR -> $DST_DIR on branch $BRANCH"
           git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
@@ -126,10 +120,11 @@ jobs:
             echo "No changes to commit in ${SDK_DIR}; nothing pushed."
           fi
 
-      - name: Create PR in repo-B via gh
+      - name: Create PR in sdk-repo via gh
         if: steps.detect.outputs.changed_files != '' && steps.push.outputs.pushed_branch != ''
         env:
           TARGET_REPO: ${{ env.SDK_REPO }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         id: gh_create_pr
         run: |
           set -euo pipefail
@@ -139,7 +134,7 @@ jobs:
           
           PR_URL=$(gh pr create --repo "${TARGET_REPO}" --head "${BRANCH}" --base "main" --title "${TITLE}" --body "${BODY}")
           echo "PR URL: $PR_URL"
-  
+          
           PR_NUMBER=$(echo "$PR_URL" | awk -F/ '{print $NF}')
           echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
           
@@ -153,13 +148,14 @@ jobs:
         id: gh_try_merge
         env:
           TARGET_REPO: ${{ env.SDK_REPO }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           PR_NUMBER="${{ steps.gh_create_pr.outputs.pr_number }}"
           
           if gh pr merge "${PR_NUMBER}" --repo "${TARGET_REPO}" --squash --delete-branch 2>/tmp/gh_merge_err; then
           echo "merged=true" >> $GITHUB_OUTPUT
-    
+          
           else
           echo "merged=false" >> $GITHUB_OUTPUT
           echo "merge-error:"
