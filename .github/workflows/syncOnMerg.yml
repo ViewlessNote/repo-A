@@ -147,7 +147,7 @@ jobs:
         id: gh_try_merge
         env:
           TARGET_REPO: ${{ env.SDK_REPO }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
         run: |
           set -euo pipefail
           PR_NUMBER="${{ steps.gh_create_pr.outputs.pr_number }}"
