@@ -92,7 +92,6 @@ jobs:
         working-directory: paas-backend-sdk
         env:
           SDK_DIR: ${{ env.SDK_DIR }}
-          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
@@ -124,7 +123,7 @@ jobs:
         if: steps.detect.outputs.changed_files != '' && steps.push.outputs.pushed_branch != ''
         env:
           TARGET_REPO: ${{ env.SDK_REPO }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
         id: gh_create_pr
         run: |
           set -euo pipefail
