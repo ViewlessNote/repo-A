@@ -8,7 +8,7 @@ import (
 
 // greet is a simple handler demonstrating the generated SDK types.
 func greet(req *greeterv1.GreetRequest) *greeterv1.GreetResponse {
-	return &greeterv1.GreetResponse{Message: fmt.Sprintf("Marco, %s!", req.GetVorName())}
+	return &greeterv1.GreetResponse{Message: fmt.Sprintf("Mario, %s!", req.GetVorName())}
 }
 
 func main() {
