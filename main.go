@@ -12,7 +12,7 @@ func greet(req *greeterv1.GreetRequest) *greeterv1.GreetResponse {
 }
 
 func main() {
-	req := &greeterv1.GreetRequest{VorName: "Polo ID 2"}
+	req := &greeterv1.GreetRequest{VorName: "Polo"}
 	resp := greet(req)
 	fmt.Println(resp.GetMessage())
 }
