@@ -1,8 +1,8 @@
 name: CI + Sync SDK -> backend-sdk
 
 on:
-  push:
-    branches: [ "main" ]
+  create:
+    tag: "v*.*.*"
 
 permissions:
   contents: write
