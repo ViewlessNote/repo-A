@@ -34,10 +34,6 @@ jobs:
           echo "$CHANGED" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Exit if no SDK changes
-        if: steps.detect.outputs.changed_files == ''
-        run: echo "No sdk/ changes — nothing to sync."
-
       - name: Get highest-priority SDK commit metadata
         if: steps.detect.outputs.changed_files != ''
         id: sdk_commit
@@ -185,3 +181,15 @@ jobs:
           cat /tmp/gh_merge_err || true
           
           fi
+        #Triggers a Release in the SDK repo, even if the merg was empty
+        #The ACtion will Create a Release with the Same Tag as in the paas-backend repo, so that the repos are in sync and we have a Release for every Tag in the paas-backend repo, even if there are no changes in the SDK repo (e.g. only docs changes in the paas-backend repo)
+      - name: Make Release
+        if: steps.gh_try_merge.outputs.merged == 'true' || (steps.gh_try_merge.outputs.merged == 'false' && steps.detect.outputs.changed_files != '')
+        id: make_release_in_sdk_repo
+        env:
+          TARGET_REPO: ${{ env.SDK_REPO }}
+          GH_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+        run: |
+            set -euo pipefail
+            TAG="${GITHUB_REF#refs/tags/}"
+            gh release create "${TAG}" --repo "${TARGET_REPO}" --title "${TAG}"
