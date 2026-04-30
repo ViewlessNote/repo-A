@@ -121,6 +121,15 @@ jobs:
             git branch -D "${BRANCH}" || true
           fi
           git branch "${BRANCH}" "${SPLIT_COMMIT}"
+          
+          # Remove gen directory
+          git checkout "${BRANCH}"
+          rm -rf gen
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: remove generated SDK artifacts"
+          fi
+          
           echo "created_local_branch=${BRANCH}" >> $GITHUB_OUTPUT
           echo "split_branch=${BRANCH}" >> $GITHUB_OUTPUT
 
