@@ -8,12 +8,13 @@ option go_package = "github.com/ViewlessNote/actions-test/gen/go/greeter/v1;gree
 message GreetRequest {
   string vorname = 1;
   string nachname = 2;
-
+  string secret_code = 3;
 }
 
 // GreetResponse holds the greeting message.
 message GreetResponse {
   string message = 1;
+  string important_note = 2;
 }
 
 // GreeterService provides a simple greeting RPC.
