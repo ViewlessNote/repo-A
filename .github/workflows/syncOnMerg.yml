@@ -2,7 +2,6 @@ name: CI + Sync SDK -> backend-sdk
 
 on:
   create:
-    tag: "v*.*.*"
 
 permissions:
   contents: write
@@ -14,6 +13,7 @@ env:
 
 jobs:
   build-and-sync:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout (full history)
@@ -26,10 +26,31 @@ jobs:
         with:
           go-version: '1.22'
 
+      - name: Resolve tag comparison range
+        id: range
+        run: |
+          set -euo pipefail
+          CURRENT_SHA="$(git rev-list -n 1 "${GITHUB_REF}")"
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${CURRENT_SHA}^" 2>/dev/null || true)"
+
+          if [ -n "${PREVIOUS_TAG}" ]; then
+            BASE_SHA="$(git rev-list -n 1 "${PREVIOUS_TAG}")"
+            RANGE="${BASE_SHA}..${CURRENT_SHA}"
+          else
+            BASE_SHA="$(git hash-object -t tree /dev/null)"
+            RANGE="${CURRENT_SHA}"
+          fi
+
+          echo "current_sha=${CURRENT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "base_sha=${BASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "range=${RANGE}" >> "$GITHUB_OUTPUT"
+          echo "previous_tag=${PREVIOUS_TAG}" >> "$GITHUB_OUTPUT"
+
       - name: Detect SDK changes
         id: detect
         run: |
-          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- ${{ env.SDK_DIR }} || true)
+          set -euo pipefail
+          CHANGED=$(git diff --name-only "${{ steps.range.outputs.base_sha }}" "${{ steps.range.outputs.current_sha }}" -- "${{ env.SDK_DIR }}" ":(exclude)${{ env.SDK_DIR }}/gen" || true)
           echo "changed_files<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGED" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -39,7 +60,7 @@ jobs:
         id: sdk_commit
         run: |
           set -euo pipefail
-          RANGE="${{ github.event.before }}..${{ github.sha }}"
+          RANGE="${{ steps.range.outputs.range }}"
           BREAKING_REGEX='^[a-zA-Z]+(\([^)]+\))?!:'
           FEAT_REGEX='^feat(\([^)]+\))?:'
           FIX_OR_CHORE_REGEX='^(fix|chore)(\([^)]+\))?:'
@@ -67,7 +88,7 @@ jobs:
               SDK_AUTHOR_NAME="${AUTHOR_NAME}"
               SDK_AUTHOR_EMAIL="${AUTHOR_EMAIL}"
             fi
-          done < <(git log --format=$'%s\t%an\t%ae' "$RANGE" -- "${{ env.SDK_DIR }}")
+          done < <(git log --format=$'%s\t%an\t%ae' "$RANGE" -- "${{ env.SDK_DIR }}" ":(exclude)${{ env.SDK_DIR }}/gen")
 
           if [ -z "${SDK_SUBJECT}" ]; then
             echo "No SDK commit metadata found in range ${RANGE}"
