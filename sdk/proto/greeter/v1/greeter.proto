@@ -12,7 +12,7 @@ message GreetRequest {
 
 // GreetResponse holds the greeting message.
 message GreetResponse {
-  string message = 1;
+  string changed = 1;
   string important_note = 2;
 }
 
